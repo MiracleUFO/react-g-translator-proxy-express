@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "es2016",
+    "module": "commonjs",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "typeRoots": [
+      "./typings",
+      "./node_modules/@types/"
+    ],
+    "types": ["express-brute-mongoose"],
+  }
+}
