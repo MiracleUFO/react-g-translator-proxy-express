@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import bodyParser from 'body-parser';
 import cors from 'cors';
 
+import slowDown from 'express-slow-down';
 import  ExpressBruteForce from 'express-brute';
 import { translate } from '@vitalets/google-translate-api';
 
@@ -14,24 +15,36 @@ const app: Application = express();
 const port = process.env.PORT || 8000;
 
 async function startServer() {
-  const store = await getStore();
-  if (store) {
-    const bruteForce = new ExpressBruteForce(store, {
-      freeRetries: 1000,
+  app.enable('trust proxy');
+
+  const bruteStore = await getStore('bruteforce');
+  const speedStore = await getStore('slowdown');
+
+  if (bruteStore && speedStore) {
+    const bruteForce = new ExpressBruteForce(bruteStore, {
+      freeRetries: 1,
+      minWait: 2000,
+      maxWait: 15 * 60 * 1000,
     });
-    
-    app.use(bruteForce.prevent);
+    const speedLimiter = slowDown({
+      store: speedStore,
+      delayAfter: 1,
+      delayMs: 2000,
+      windowMs: 15 * 60 * 1000,
+    });
+  
     app.use(bodyParser.json())
     app.use(cors());
     
     app.post(
       '/translate',
+      speedLimiter,
       bruteForce.prevent,
       async (req, res) => {
         try {
           const { text, from, to, fetchOptions } = req.body;
           const translation = await translate(text as string, { from, to, fetchOptions });
-          console.log(translation);
+
           return res.status(200).json(JSON.stringify(translation));
         } catch (e) {
           console.error(e);

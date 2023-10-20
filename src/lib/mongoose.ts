@@ -5,7 +5,7 @@ import BruteForceSchema from 'express-brute-mongoose/dist/schema';
 
 dotenv.config();
 
-function store() {
+function store(purpose: 'bruteforce' | 'slowdown') {
   if (
     process.env.MONGOOSE_CONNECTION_STRING
     && process.env.MONGOOSE_PASSWORD
@@ -20,7 +20,7 @@ function store() {
           .then(() => {
             const schema = new mongoose.Schema(BruteForceSchema);
             if (schema) {
-              const model = mongoose.model('bruteforce', schema);
+              const model = mongoose.model(purpose, schema);
     
               const store = new MongooseStore(model);
               return store;
