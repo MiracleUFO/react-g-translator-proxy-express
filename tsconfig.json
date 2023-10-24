@@ -9,9 +9,7 @@
     "rootDir": "./src",
     "outDir": "./dist",
     "typeRoots": [
-      "./typings",
       "./node_modules/@types/"
     ],
-    "types": ["express-brute-mongoose"],
   }
 }
