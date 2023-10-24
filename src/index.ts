@@ -1,4 +1,4 @@
-import express, { Application, Request, Response } from 'express';
+import express, { Application } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import bodyParser from 'body-parser';
@@ -9,7 +9,7 @@ import { rateLimit } from 'express-rate-limit';
 import sleep from './utils/sleep';
 import delayMiddleware from './utils/delayRequests';
 import RequestCountModel from './lib/mongoose';
-import { EXPRESS_RATE_LIMITER_OPTS } from './constants';
+import { EXPRESS_RATE_LIMITER_OPTS, TOO_MANY_REQUESTS } from './constants';
 
 dotenv.config();
 
@@ -19,44 +19,48 @@ const port = process.env.PORT || 8000;
 async function startServer() {
   app.set('trust proxy', 1);
 
-  const limiter = rateLimit(EXPRESS_RATE_LIMITER_OPTS);
-  const RequestCount = await RequestCountModel();
-  if (!RequestCount) return;
-  
   app.use(bodyParser.json())
   app.use(cors());
+
+  const limiter = rateLimit(EXPRESS_RATE_LIMITER_OPTS);
+
+  const RequestCount = await RequestCountModel();
+  if (!RequestCount) return;
   
   app.post(
     '/translate',
     limiter,
     async (req, res) => {
       try {
-        //  this way because react-query acts strange..
-        //  when middleware is used as express reccommends
         const delay = await delayMiddleware();
 
+        //  delay applied across all users (irrespective of IP)
+        //  as previous limiting by IP still hit Err `429` quickly
+        //  if delay makes responses too slow for your use-case
+        //  host server and reduce/remove delay
         await sleep(delay);
 
         const { text, from, to } = req.body;
-        const translation = await translate(text as string, {
-          from,
-          to,
-          rejectOnPartialFail: false
-        });
 
-        await RequestCount.create({ })
+        const translation = await translate(
+          text as string,
+          {
+            from,
+            to,
+            rejectOnPartialFail: false
+          }
+        );
+
+        await RequestCount.create({ });
 
         return res.status(200).json(JSON.stringify(translation));
       } catch (e) {
         const error = e as Error;
         if (
-          error.message.includes(('TooManyRequestsError'))
-          || error.message.includes('Too Many Requests')
+          error.message.includes(TOO_MANY_REQUESTS)
+          || error.message.includes(TOO_MANY_REQUESTS.replace(/ /g, ''))
           || error.message.includes('429')
-        ) {
-          const { text, from, to } = req.body;
-          return res.status(429).json(JSON.stringify(e));
-        }
+        ) return res.status(429).json(error);
 
         return res.status(500).json(error);
       }
