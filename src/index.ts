@@ -1,13 +1,15 @@
-import express, { Application } from 'express';
+import express, { Application, Request, Response } from 'express';
+import cors from 'cors';
 import dotenv from 'dotenv';
 import bodyParser from 'body-parser';
-import cors from 'cors';
 
-import slowDown from 'express-slow-down';
-import  ExpressBruteForce from 'express-brute';
-import { translate } from '@vitalets/google-translate-api';
+import { translate } from 'google-translate-api-x';
+import { rateLimit } from 'express-rate-limit';
 
-import getStore from './lib/mongoose';
+import sleep from './utils/sleep';
+import delayMiddleware from './utils/delayRequests';
+import RequestCountModel from './lib/mongoose';
+import { EXPRESS_RATE_LIMITER_OPTS } from './constants';
 
 dotenv.config();
 
@@ -15,51 +17,58 @@ const app: Application = express();
 const port = process.env.PORT || 8000;
 
 async function startServer() {
-  app.enable('trust proxy');
+  app.set('trust proxy', 1);
 
-  const bruteStore = await getStore('bruteforce');
-  const speedStore = await getStore('slowdown');
-
-  if (bruteStore && speedStore) {
-    const bruteForce = new ExpressBruteForce(bruteStore, {
-      freeRetries: 1,
-      minWait: 2000,
-      maxWait: 15 * 60 * 1000,
-    });
-    const speedLimiter = slowDown({
-      store: speedStore,
-      delayAfter: 1,
-      delayMs: 2000,
-      windowMs: 15 * 60 * 1000,
-    });
+  const limiter = rateLimit(EXPRESS_RATE_LIMITER_OPTS);
+  const RequestCount = await RequestCountModel();
+  if (!RequestCount) return;
   
-    app.use(bodyParser.json())
-    app.use(cors());
-    
-    app.post(
-      '/translate',
-      speedLimiter,
-      bruteForce.prevent,
-      async (req, res) => {
-        try {
-          const { text, from, to, fetchOptions } = req.body;
-          const translation = await translate(text as string, { from, to, fetchOptions });
+  app.use(bodyParser.json())
+  app.use(cors());
+  
+  app.post(
+    '/translate',
+    limiter,
+    async (req, res) => {
+      try {
+        //  this way because react-query acts strange..
+        //  when middleware is used as express reccommends
+        const delay = await delayMiddleware();
 
-          return res.status(200).json(JSON.stringify(translation));
-        } catch (e) {
-          console.error(e);
-          return res.status(500).json(JSON.stringify(e));
+        await sleep(delay);
+
+        const { text, from, to } = req.body;
+        const translation = await translate(text as string, {
+          from,
+          to,
+          rejectOnPartialFail: false
+        });
+
+        await RequestCount.create({ })
+
+        return res.status(200).json(JSON.stringify(translation));
+      } catch (e) {
+        const error = e as Error;
+        if (
+          error.message.includes(('TooManyRequestsError'))
+          || error.message.includes('Too Many Requests')
+          || error.message.includes('429')
+        ) {
+          const { text, from, to } = req.body;
+          return res.status(429).json(JSON.stringify(e));
         }
-    });
-    
-    app.listen(port, () => {
-      console.log(`Express server listening on port ${port}`);
-    });
-    
-    app.use((_req, _res, next) => {
-      next('404 - RouteNotFound: You\'re falling off the earth 😵‍💫.');
-    });
-  }
+
+        return res.status(500).json(error);
+      }
+  });
+  
+  app.listen(port, () => {
+    console.log(`Express server listening on port ${port}`);
+  });
+  
+  app.use((_req, _res, next) => {
+    next('404 - RouteNotFound: You\'re falling off the earth 😵‍💫.');
+  });
 }
 
 startServer();
