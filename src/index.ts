@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import bodyParser from 'body-parser';
 
+import fetch from 'node-fetch';
 import { translate } from 'google-translate-api-x';
 import { rateLimit } from 'express-rate-limit';
 
@@ -47,17 +48,18 @@ async function startServer() {
           {
             from,
             to,
-            rejectOnPartialFail: false
+            rejectOnPartialFail: false,
+            requestFunction: fetch,
           }
         );
 
         await RequestCount.create({ });
-        console.log('SUCCESS', translation);
 
         return res.status(200).json(JSON.stringify(translation));
       } catch (e) {
         const error = e as Error;
         console.log('ERROR', e);
+  
         if (
           error.message.includes(TOO_MANY_REQUESTS)
           || error.message.includes(TOO_MANY_REQUESTS.replace(/ /g, ''))
