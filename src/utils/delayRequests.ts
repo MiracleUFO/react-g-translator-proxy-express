@@ -14,9 +14,9 @@ async function delayMiddleware() {
 
   let delay = 1000;
 
-  if (countOneMinute >= 100) delay = 60000;
-  if (countFifteenSeconds >= 10) delay = 15000;
-  if (countTwoSeconds >= 2) delay = 2000;
+  if (countOneMinute >= 100) delay = 60000 * 2;
+  if (countFifteenSeconds >= 10) delay = 15000 * 2;
+  if (countTwoSeconds >= 2) delay = 2000 * 2;
   
   return delay;
 }
